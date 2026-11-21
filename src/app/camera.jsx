@@ -1,14 +1,32 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { guardarCopia } from '../storage';
 
 export default function CameraScreen() {
   const [facing, setFacing] = useState('back');
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission, getPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
+
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') getPermission();
+    });
+    return () => sub.remove();
+  }, [getPermission]);
 
   if (!permission) {
     return <View style={styles.center} />;
@@ -18,8 +36,25 @@ export default function CameraScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.message}>Necesitamos acceso a la cámara para tomar fotos.</Text>
-        <Pressable style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>Dar permiso</Text>
+        <Text style={styles.hint}>
+          La cámara se usa únicamente para tomar las fotos que tú decidas subir al servidor.
+        </Text>
+        {permission.canAskAgain ? (
+          <Pressable style={styles.button} onPress={requestPermission}>
+            <Text style={styles.buttonText}>Dar permiso</Text>
+          </Pressable>
+        ) : (
+          <>
+            <Text style={styles.hint}>
+              El permiso fue denegado. Actívalo en los ajustes para poder continuar.
+            </Text>
+            <Pressable style={styles.button} onPress={() => Linking.openSettings()}>
+              <Text style={styles.buttonText}>Abrir ajustes</Text>
+            </Pressable>
+          </>
+        )}
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.link}>Volver</Text>
         </Pressable>
       </View>
     );
@@ -34,7 +69,13 @@ export default function CameraScreen() {
     if (!ready || busy) return;
     setBusy(true);
     try {
-      Alert.alert("Take a photo!")
+
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
+
+      const uri = await guardarCopia(photo.uri);
+      router.push({ pathname: '/photo', params: { uri } });
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo tomar la foto. Intenta de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -79,6 +120,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   message: { fontSize: 16, textAlign: 'center' },
+  hint: { fontSize: 14, textAlign: 'center', color: '#475569' },
+  link: { fontSize: 16, color: '#2563eb', fontWeight: '600' },
   button: { backgroundColor: '#2563eb', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   controls: {

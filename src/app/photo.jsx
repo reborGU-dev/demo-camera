@@ -1,18 +1,42 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { subirFoto } from '../api';
 
 export default function PhotoScreen() {
-  // El router ya decodifica el parámetro una vez; no hay que decodificarlo de nuevo.
+
   const { uri } = useLocalSearchParams();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const enviar = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await subirFoto(uri);
+
+      router.dismissTo('/');
+    } catch (e) {
+      setError(e.message || 'No se pudo subir la foto.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <Image source={{ uri }} style={styles.image} resizeMode="contain" />
       <View style={styles.actions}>
-        <Pressable style={styles.primary} onPress={() => {}}>
-          <Text style={styles.primaryText}>Enviar al servidor</Text>
+        {error && <Text style={styles.error}>{error}</Text>}
+        <Pressable style={[styles.primary, busy && styles.disabled]} onPress={enviar} disabled={busy}>
+          {busy ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryText}>{error ? 'Reintentar' : 'Enviar al servidor'}</Text>
+          )}
         </Pressable>
-        <Pressable style={styles.secondary} onPress={() => router.back()}>
+        <Pressable style={styles.secondary} onPress={() => router.back()} disabled={busy}>
           <Text style={styles.secondaryText}>Reiniciar</Text>
         </Pressable>
       </View>
@@ -30,6 +54,14 @@ const styles = StyleSheet.create({
     right: 24,
     gap: 12,
   },
+  error: {
+    color: '#fff',
+    backgroundColor: 'rgba(220,38,38,0.9)',
+    padding: 10,
+    borderRadius: 10,
+    textAlign: 'center',
+  },
+  disabled: { opacity: 0.6 },
   primary: {
     backgroundColor: '#2563eb',
     paddingVertical: 14,
